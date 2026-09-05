@@ -1,0 +1,93 @@
+name: Android CI & Release
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Configure Keystore and Secrets
+        run: |
+          # Create a dummy .env file to satisfy the Secrets Gradle Plugin
+          if [ ! -f .env ]; then
+            cp .env.example .env || touch .env
+          fi
+          
+          # Decode the debug keystore
+          if [ -f debug.keystore.base64 ]; then
+            echo "Decoding debug.keystore..."
+            base64 -d debug.keystore.base64 > debug.keystore
+          else
+            echo "debug.keystore.base64 not found, Gradle will generate a default one or use pre-configured if available."
+          fi
+
+      - name: Run Unit Tests
+        run: ./gradlew testDebugUnitTest
+
+      - name: Check Signing Configuration
+        id: check_secrets
+        run: |
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ] && [ -n "${{ secrets.STORE_PASSWORD }}" ] && [ -n "${{ secrets.KEY_PASSWORD }}" ]; then
+            echo "has_release_secrets=true" >> $GITHUB_OUTPUT
+            echo "Release secrets found. Preparing to build and sign Release APK."
+          else
+            echo "has_release_secrets=false" >> $GITHUB_OUTPUT
+            echo "No release secrets found. Building Debug APK (already signed with debug keystore) and an unsigned/debug-signed Release APK."
+          fi
+
+      - name: Prepare Release Keystore (if secrets provided)
+        if: steps.check_secrets.outputs.has_release_secrets == 'true'
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > my-upload-key.jks
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Build Release APK
+        env:
+          KEYSTORE_PATH: my-upload-key.jks
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ "${{ steps.check_secrets.outputs.has_release_secrets }}" = "true" ]; then
+            ./gradlew assembleRelease --stacktrace
+          else
+            # Fallback to signing release with debug key so build doesn't break
+            echo "Signing release build with debug keystore as a fallback..."
+            sed -i 's/signingConfig = signingConfigs.getByName("release")/signingConfig = signingConfigs.getByName("debugConfig")/g' app/build.gradle.kts
+            ./gradlew assembleRelease --stacktrace
+          fi
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NXV-Player-Debug-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: warn
+
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NXV-Player-Release-APK
+          path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: warn
