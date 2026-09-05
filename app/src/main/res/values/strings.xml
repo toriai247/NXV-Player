@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">NXV Player</string>
+    <string name="notification_channel_playback">Media Playback</string>
+    <string name="notification_channel_playback_desc">Controls and status for video playback and background audio</string>
+    <string name="audio_mode">Audio Mode</string>
+    <string name="audio_mode_desc">Listen to video audio with screen off</string>
+    <string name="play_as_audio">Play as Audio</string>
+</resources>

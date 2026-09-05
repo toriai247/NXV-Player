@@ -1,0 +1,7 @@
+{
+  "name": "NXV Player",
+  "description": "Fast, premium, offline-first Android video player with AMOLED dark UI, powerful gesture controls, and Media3 ExoPlayer playback.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
